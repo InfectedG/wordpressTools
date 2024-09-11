@@ -21,11 +21,11 @@ backup() {
     
     echo "Début de la sauvegarde pour $ENV..."
     
-    # Sauvegarde du site
-    tar -czvf "${BACKUP_DIR}/${BACKUP_NAME}_site.tar.gz" -C "$(dirname "$SITE_DIR")" "$(basename "$SITE_DIR")"
+    # Sauvegarde du site en excluant node_modules
+    tar --exclude="$SITE_DIR/api/node_modules" -czvf "${BACKUP_DIR}/${BACKUP_NAME}_site.tar.gz" -C "$(dirname "$SITE_DIR")" "$(basename "$SITE_DIR")"
     
     # Sauvegarde de la base de données
-    mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "${BACKUP_DIR}/${BACKUP_NAME}_db.sql"
+    /usr/bin/mariadb-dump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "${BACKUP_DIR}/${BACKUP_NAME}_db.sql"
     
     echo "Sauvegarde terminée. Fichiers sauvegardés dans ${BACKUP_DIR}"
 }
