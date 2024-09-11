@@ -16,6 +16,23 @@ load_config() {
     fi
 }
 
+# Nouvelle fonction pour mettre à jour wp-config.php
+update_wp_config() {
+    local CONFIG_FILE="$SITE_DIR/wp-config.php"
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Fichier wp-config.php non trouvé."
+        return 1
+    }
+    
+    sed -i "s/define( *'DB_NAME', *'[^']*' *);/define( 'DB_NAME', '$DB_NAME' );/" "$CONFIG_FILE"
+    sed -i "s/define( *'DB_USER', *'[^']*' *);/define( 'DB_USER', '$DB_USER' );/" "$CONFIG_FILE"
+    sed -i "s/define( *'DB_PASSWORD', *'[^']*' *);/define( 'DB_PASSWORD', '$DB_PASS' );/" "$CONFIG_FILE"
+    sed -i "s/define( *'DB_HOST', *'[^']*' *);/define( 'DB_HOST', '$DB_HOST' );/" "$CONFIG_FILE"
+    
+    echo "Fichier wp-config.php mis à jour avec les nouvelles informations de base de données."
+}
+
 # Fonction pour mettre à jour la base de données
 update_db() {
     local OLD_URL="$1"
@@ -53,9 +70,15 @@ restore() {
     # Restauration de la base de données
     mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$BACKUP_DB"
     
-    # Si on déploie de prod vers preprod, mettre à jour la base de données
-    if [ "$FROM_ENV" == "prod" ] && [ "$TO_ENV" == "preprod" ]; then
-        echo "Déploiement de prod vers preprod détecté. Mise à jour de la base de données..."
+    # Si on déploie vers dev, mettre à jour wp-config.php
+    if [ "$TO_ENV" == "dev" ]; then
+        echo "Déploiement vers l'environnement de développement détecté. Mise à jour de wp-config.php..."
+        update_wp_config
+    fi
+    
+    # Si on déploie de prod vers preprod ou dev, mettre à jour la base de données
+    if [ "$FROM_ENV" == "prod" ] && ([ "$TO_ENV" == "preprod" ] || [ "$TO_ENV" == "dev" ]); then
+        echo "Déploiement de prod vers preprod/dev détecté. Mise à jour de la base de données..."
         update_db "$PROD_URL" "$PREPROD_URL"
     fi
     
