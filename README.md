@@ -67,6 +67,7 @@ Où :
 ```bash
 ./wp_restore.sh prod prod chemin/vers/sauvegarde_site.tar.gz chemin/vers/sauvegarde_db.sql
 ```
+
 Cela restaurera les fichiers du site et la base de données à partir des fichiers de sauvegarde spécifiés.
 
 2. Restaurer de production vers preprod (dev) :
