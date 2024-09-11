@@ -1,8 +1,6 @@
-# Web3Factory
-
 ## Scripts de Sauvegarde et Restauration WordPress
 
-Ce dépôt contient des scripts pour sauvegarder et restaurer Web3Factory, y compris les fichiers du site et la base de données. Les scripts prennent en charge deux environnements : production et préproduction et la création d'un portage vers preprod (dev).
+Ce dépôt contient des scripts pour sauvegarder et restaurer un site WordPress, y compris les fichiers du site et la base de données. Les scripts prennent en charge deux environnements : production et préproduction et la création d'un portage vers preprod (dev).
 
 ### Contenu
 
