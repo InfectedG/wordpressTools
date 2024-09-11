@@ -5,9 +5,9 @@
 # Fonction pour charger la configuration
 load_config() {
     if [ "$1" == "prod" ]; then
-        source ./prod.env
+        source ./.prod.env
     elif [ "$1" == "preprod" ]; then
-        source ./preprod.env
+        source ./.preprod.env
     else
         echo "Environnement non reconnu. Utilisez 'prod' ou 'preprod'."
         exit 1
@@ -27,7 +27,7 @@ backup() {
     # Sauvegarde de la base de données
     /usr/bin/mariadb-dump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "${BACKUP_DIR}/${BACKUP_NAME}_db.sql"
     
-    echo "Sauvegarde terminée. Fichiers sauvegardés dans ${BACKUP_DIR}"
+    echo "Sauvegarde terminée. Fichiers sauvegardés dans ${BACKUP_DIR}/${BACKUP_NAME}_site.tar.gz et ${BACKUP_DIR}/${BACKUP_NAME}_db.sql"
 }
 
 # Vérification des arguments
