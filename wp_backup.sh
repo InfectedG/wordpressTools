@@ -16,6 +16,16 @@ load_config() {
 
 # Fonction de sauvegarde
 backup() {
+
+    # Créer le répertoire de sauvegarde s'il n'existe pas
+    mkdir -p "$BACKUP_DIR"
+
+    # Vérifier si la création du répertoire a réussi
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo "Impossible de créer le répertoire de sauvegarde $BACKUP_DIR"
+        exit 1
+    fi
+    
     local DATE=$(date +"%Y%m%d_%H%M%S")
     local BACKUP_NAME="${SITE_NAME}_${ENV}_${DATE}"
     

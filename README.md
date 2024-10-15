@@ -60,22 +60,18 @@ Où :
 - `<chemin_backup_site>` est le chemin vers l'archive du site
 - `<chemin_backup_db>` est le chemin vers le dump de la base de données
 
-1. Restaurer de production vers production :
+1. Restaurer de production vers préproduction :
+   ```bash
+   ./wp_restore.sh prod preprod chemin/vers/sauvegarde_site.tar.gz chemin/vers/sauvegarde_db.sql
+   ```
 
-```bash
-./wp_restore.sh prod prod chemin/vers/sauvegarde_site.tar.gz chemin/vers/sauvegarde_db.sql
-```
-
-Cela restaurera les fichiers du site et la base de données à partir des fichiers de sauvegarde spécifiés.
-
-2. Restaurer de production vers preprod (dev) :
-
-```bash
-./wp_restore.sh prod dev chemin/vers/sauvegarde_site.tar.gz chemin/vers/sauvegarde_db.sql
-```
+2. Restaurer de préproduction vers production :
+   ```bash
+   ./wp_restore.sh preprod prod chemin/vers/sauvegarde_site.tar.gz chemin/vers/sauvegarde_db.sql
+   ```
 
 
-Note : Lors d'une restauration vers l'environnement de développement, le script effectuera automatiquement les ajustements nécessaires pour adapter les URLs et autres paramètres spécifiques à l'environnement.
+Note : Lors de la restauration entre les environnements de production et de préproduction, le script effectuera automatiquement les ajustements nécessaires pour adapter les URLs et autres paramètres spécifiques à l'environnement cible.
 
 
 

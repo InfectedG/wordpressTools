@@ -16,7 +16,7 @@ load_config() {
     fi
 }
 
-# Nouvelle fonction pour mettre à jour wp-config.php
+# Fonction pour mettre à jour wp-config.php
 update_wp_config() {
     local CONFIG_FILE="$SITE_DIR/wp-config.php"
 
@@ -25,12 +25,23 @@ update_wp_config() {
         return 1
     fi
 
+    # Échapper les caractères spéciaux dans le mot de passe
+    local ESCAPED_DB_PASS=$(printf '%s\n' "$DB_PASS" | sed -e 's/[\/&]/\\&/g')
+
     sed -i "s/define( *'DB_NAME', *'[^']*' *);/define( 'DB_NAME', '$DB_NAME' );/" "$CONFIG_FILE"
     sed -i "s/define( *'DB_USER', *'[^']*' *);/define( 'DB_USER', '$DB_USER' );/" "$CONFIG_FILE"
-    sed -i "s/define( *'DB_PASSWORD', *'[^']*' *);/define( 'DB_PASSWORD', '$DB_PASS' );/" "$CONFIG_FILE"
+    sed -i "s/define( *'DB_PASSWORD', *'[^']*' *);/define( 'DB_PASSWORD', '$ESCAPED_DB_PASS' );/" "$CONFIG_FILE"
     sed -i "s/define( *'DB_HOST', *'[^']*' *);/define( 'DB_HOST', '$DB_HOST' );/" "$CONFIG_FILE"
 
     echo "Fichier wp-config.php mis à jour avec les nouvelles informations de base de données."
+
+    # Vérification
+    if grep -q "define( 'DB_PASSWORD', '$ESCAPED_DB_PASS' );" "$CONFIG_FILE"; then
+        echo "Mot de passe correctement mis à jour dans wp-config.php"
+    else
+        echo "ERREUR : Le mot de passe n'a pas été correctement mis à jour dans wp-config.php"
+        return 1
+    fi
 }
 
 # Fonction pour mettre à jour la base de données
@@ -42,68 +53,100 @@ update_db() {
     echo "Ancien URL : $OLD_URL"
     echo "Nouvel URL : $NEW_URL"
 
-    # Mise à jour spécifique pour home et siteurl
+    # Mise à jour des tables principales
     /usr/bin/mariadb -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" <<EOF
-UPDATE wp_options SET option_value = '$NEW_URL' WHERE option_name IN ('home', 'siteurl');
-UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', '$NEW_URL') WHERE option_value LIKE '%$OLD_URL%';
-UPDATE wp_posts SET guid = replace(guid, '$OLD_URL', '$NEW_URL');
-UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', '$NEW_URL');
-UPDATE wp_postmeta SET meta_value = replace(meta_value, '$OLD_URL', '$NEW_URL') WHERE meta_value LIKE '%$OLD_URL%';
-UPDATE wp_links SET link_url = replace(link_url, '$OLD_URL', '$NEW_URL');
-UPDATE wp_links SET link_image = replace(link_image, '$OLD_URL', '$NEW_URL');
+    -- Mise à jour des options
+    UPDATE wp_options SET option_value = REPLACE(option_value, '$OLD_URL', '$NEW_URL');
+    
+    -- Mise à jour des posts
+    UPDATE wp_posts SET post_content = REPLACE(post_content, '$OLD_URL', '$NEW_URL');
+    UPDATE wp_posts SET guid = REPLACE(guid, '$OLD_URL', '$NEW_URL');
+    UPDATE wp_posts SET post_excerpt = REPLACE(post_excerpt, '$OLD_URL', '$NEW_URL');
+    
+    -- Mise à jour des métadonnées
+    UPDATE wp_postmeta SET meta_value = REPLACE(meta_value, '$OLD_URL', '$NEW_URL');
+    
+    -- Mise à jour des commentaires
+    UPDATE wp_comments SET comment_content = REPLACE(comment_content, '$OLD_URL', '$NEW_URL');
+    UPDATE wp_comments SET comment_author_url = REPLACE(comment_author_url, '$OLD_URL', '$NEW_URL');
+    
+    -- Mise à jour des liens
+    UPDATE wp_links SET link_url = REPLACE(link_url, '$OLD_URL', '$NEW_URL');
+    UPDATE wp_links SET link_image = REPLACE(link_image, '$OLD_URL', '$NEW_URL');
+    
+    -- Mise à jour des termes
+    UPDATE wp_termmeta SET meta_value = REPLACE(meta_value, '$OLD_URL', '$NEW_URL');
 EOF
 
-    if [ $? -eq 0 ]; then
-        echo "Requêtes SQL exécutées avec succès."
-    else
+    if [ $? -ne 0 ]; then
         echo "Erreur lors de l'exécution des requêtes SQL."
         return 1
     fi
 
-    # Vérification des mises à jour
-    local HOME_URL=$(/usr/bin/mariadb -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT option_value FROM wp_options WHERE option_name = 'home';")
-    local SITE_URL=$(/usr/bin/mariadb -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT option_value FROM wp_options WHERE option_name = 'siteurl';")
-
-    echo "URL 'home' actuel : $HOME_URL"
-    echo "URL 'siteurl' actuel : $SITE_URL"
-
-    if [ "$HOME_URL" = "$NEW_URL" ] && [ "$SITE_URL" = "$NEW_URL" ]; then
-        echo "Les URLs principales ont été correctement mises à jour."
-    else
-        echo "Attention : Les URLs principales n'ont pas été mises à jour correctement."
-        echo "Vérification supplémentaire des options 'home' et 'siteurl'..."
-        /usr/bin/mariadb -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SELECT option_name, option_value FROM wp_options WHERE option_name IN ('home', 'siteurl');"
-    fi
-
     # Mise à jour des données sérialisées
     php -r "
-function update_serialized_data(\$old_url, \$new_url, \$db_host, \$db_user, \$db_pass, \$db_name) {
-    \$mysqli = new mysqli(\$db_host, \$db_user, \$db_pass, \$db_name);
+    function replace_urls(\$old_url, \$new_url, \$data) {
+        if (is_string(\$data)) {
+            return str_replace(\$old_url, \$new_url, \$data);
+        }
+        if (is_array(\$data) || is_object(\$data)) {
+            foreach (\$data as \$key => \$value) {
+                if (is_array(\$data)) {
+                    \$data[\$key] = replace_urls(\$old_url, \$new_url, \$value);
+                } elseif (is_object(\$data)) {
+                    \$data->\$key = replace_urls(\$old_url, \$new_url, \$value);
+                }
+            }
+        }
+        return \$data;
+    }
+
+    \$mysqli = new mysqli('$DB_HOST', '$DB_USER', '$DB_PASS', '$DB_NAME');
     if (\$mysqli->connect_error) {
         die('Connect Error (' . \$mysqli->connect_errno . ') ' . \$mysqli->connect_error);
     }
-    \$result = \$mysqli->query(\"SELECT option_id, option_name, option_value FROM wp_options WHERE option_value LIKE '%{\$old_url}%'\");
+
+    // Mise à jour des options sérialisées
+    \$result = \$mysqli->query(\"SELECT option_id, option_name, option_value FROM wp_options WHERE option_value LIKE '%$OLD_URL%'\");
     while (\$row = \$result->fetch_assoc()) {
         \$value = \$row['option_value'];
-        if (@unserialize(\$value) !== false) {
-            \$unserialized = unserialize(\$value);
-            \$updated = str_replace(\$old_url, \$new_url, serialize(\$unserialized));
+        \$unserialized = @unserialize(\$value);
+        if (\$unserialized !== false) {
+            \$updated = serialize(replace_urls('$OLD_URL', '$NEW_URL', \$unserialized));
             \$stmt = \$mysqli->prepare(\"UPDATE wp_options SET option_value = ? WHERE option_id = ?\");
             \$stmt->bind_param('si', \$updated, \$row['option_id']);
             \$stmt->execute();
             echo \"Updated serialized data in option: {\$row['option_name']}\\n\";
         }
     }
-    \$mysqli->close();
-}
-update_serialized_data('$OLD_URL', '$NEW_URL', '$DB_HOST', '$DB_USER', '$DB_PASS', '$DB_NAME');
-"
 
-    echo "Mise à jour des données sérialisées terminée."
+    // Mise à jour des métadonnées sérialisées
+    \$result = \$mysqli->query(\"SELECT meta_id, meta_key, meta_value FROM wp_postmeta WHERE meta_value LIKE '%$OLD_URL%'\");
+    while (\$row = \$result->fetch_assoc()) {
+        \$value = \$row['meta_value'];
+        \$unserialized = @unserialize(\$value);
+        if (\$unserialized !== false) {
+            \$updated = serialize(replace_urls('$OLD_URL', '$NEW_URL', \$unserialized));
+            \$stmt = \$mysqli->prepare(\"UPDATE wp_postmeta SET meta_value = ? WHERE meta_id = ?\");
+            \$stmt->bind_param('si', \$updated, \$row['meta_id']);
+            \$stmt->execute();
+            echo \"Updated serialized data in postmeta: {\$row['meta_key']}\\n\";
+        }
+    }
+
+    \$mysqli->close();
+    "
+
+    echo "Mise à jour de la base de données terminée."
 
     # Vérification finale
     echo "Vérification finale des URLs dans la base de données..."
-    /usr/bin/mariadb -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "SELECT option_name, option_value FROM wp_options WHERE option_value LIKE '%$OLD_URL%' LIMIT 5;"
+    /usr/bin/mariadb -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -e "
+    SELECT option_name, option_value FROM wp_options WHERE option_value LIKE '%$OLD_URL%' LIMIT 5;
+    SELECT ID, post_title, guid FROM wp_posts WHERE guid LIKE '%$OLD_URL%' OR post_content LIKE '%$OLD_URL%' LIMIT 5;
+    SELECT post_id, meta_key, meta_value FROM wp_postmeta WHERE meta_value LIKE '%$OLD_URL%' LIMIT 5;
+    SELECT comment_ID, comment_author_url FROM wp_comments WHERE comment_author_url LIKE '%$OLD_URL%' LIMIT 5;
+    "
 }
 
 # Fonction de restauration
@@ -118,7 +161,7 @@ restore() {
         exit 1
     fi
 
-    echo "Début de la restauration pour $TO_ENV..."
+    echo "Début de la restauration de $FROM_ENV vers $TO_ENV..."
 
     # Nettoyage du répertoire cible
     rm -rf "$SITE_DIR"/*
@@ -126,11 +169,6 @@ restore() {
     # Extraction de l'archive du site
     echo "Extraction de l'archive du site vers $SITE_DIR"
     tar -xzvf "$BACKUP_SITE" -C "$SITE_DIR" --strip-components=1
-    #supprimer le premier niveau de répértoire  >
-    # /srv/example.tld_preprod/example.tld/wp-content/...
-    # /srv/example.tld_preprod/example.tld/wp-includes/...
-    # /srv/example.tld_preprod/example.tld/index.php
-    #...
 
     if [ $? -ne 0 ]; then
         echo "Erreur lors de l'extraction de l'archive"
@@ -139,18 +177,17 @@ restore() {
 
     # Restauration de la base de données
     echo "Restauration de la base de données"
-    /usr/bin/mariadb -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" <"$BACKUP_DB"
+    /usr/bin/mariadb -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$BACKUP_DB"
 
-    # Si on déploie vers dev, mettre à jour wp-config.php
-    if [ "$TO_ENV" == "dev" ]; then
-        echo "Déploiement vers l'environnement de développement détecté. Mise à jour de wp-config.php..."
-        update_wp_config
-    fi
+    # Mise à jour de wp-config.php pour tous les environnements
+    echo "Mise à jour de wp-config.php..."
+    update_wp_config
 
-    # Si on déploie de prod vers preprod ou dev, mettre à jour la base de données
-    if [ "$FROM_ENV" == "prod" ] && ([ "$TO_ENV" == "preprod" ] || [ "$TO_ENV" == "dev" ]); then
-        echo "Déploiement de prod vers preprod/dev détecté. Mise à jour de la base de données..."
-        update_db "$PROD_URL" "$PREPROD_URL"
+    # Mise à jour de la base de données si nécessaire
+    if [ "$FROM_ENV" != "$TO_ENV" ]; then
+        local FROM_URL="${FROM_ENV^^}_URL"
+        local TO_URL="${TO_ENV^^}_URL"
+        update_db "${!FROM_URL}" "${!TO_URL}"
     fi
 
     echo "Restauration terminée."
